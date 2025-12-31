@@ -1,0 +1,621 @@
+{
+	"info": {
+		"_postman_id": "es-rerank-collection",
+		"name": "Elasticsearch Reranking",
+		"description": "Collection for managing product trending scores in Elasticsearch",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://0b631774f12b4ae3ba94fe3210d761fd.me-south-1.aws.elastic-cloud.com:9243",
+			"type": "string"
+		},
+		{
+			"key": "index",
+			"value": "skus_product_pool_v3",
+			"type": "string"
+		},
+		{
+			"key": "username",
+			"value": "elastic",
+			"type": "string"
+		},
+		{
+			"key": "password",
+			"value": "your-password-here",
+			"type": "string"
+		},
+		{
+			"key": "api_url",
+			"value": "http://localhost:5000",
+			"type": "string"
+		},
+		{
+			"key": "api_key",
+			"value": "jazi-rerank-api-key-2024",
+			"type": "string"
+		}
+	],
+	"auth": {
+		"type": "basic",
+		"basic": [
+			{
+				"key": "username",
+				"value": "{{username}}",
+				"type": "string"
+			},
+			{
+				"key": "password",
+				"value": "{{password}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "Reranking API",
+			"item": [
+				{
+					"name": "Health Check (No Auth)",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{api_url}}/health",
+							"host": ["{{api_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Overall Stats",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/stats",
+							"host": ["{{api_url}}"],
+							"path": ["stats"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Distribution by Views",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/distribution/views",
+							"host": ["{{api_url}}"],
+							"path": ["distribution", "views"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Distribution by Scores",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/distribution/scores",
+							"host": ["{{api_url}}"],
+							"path": ["distribution", "scores"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Top Trending",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/top?limit=20",
+							"host": ["{{api_url}}"],
+							"path": ["top"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bottom Trending",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/bottom?limit=20",
+							"host": ["{{api_url}}"],
+							"path": ["bottom"],
+							"query": [
+								{
+									"key": "limit",
+									"value": "20"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Full Summary",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/summary",
+							"host": ["{{api_url}}"],
+							"path": ["summary"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Stats with Custom Index",
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-API-Key",
+								"value": "{{api_key}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{api_url}}/stats?index={{index}}",
+							"host": ["{{api_url}}"],
+							"path": ["stats"],
+							"query": [
+								{
+									"key": "index",
+									"value": "{{index}}"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			],
+			"description": "Reranking Analytics API endpoints. Requires X-API-Key header for authentication (except /health)."
+		},
+		{
+			"name": "Connection",
+			"item": [
+				{
+					"name": "Test Connection",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/",
+							"host": ["{{base_url}}"],
+							"path": [""]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Cluster Health",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/_cluster/health",
+							"host": ["{{base_url}}"],
+							"path": ["_cluster", "health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "List Indices",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/_cat/indices?v&s=index",
+							"host": ["{{base_url}}"],
+							"path": ["_cat", "indices"],
+							"query": [
+								{"key": "v", "value": null},
+								{"key": "s", "value": "index"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "SKU Operations",
+			"item": [
+				{
+					"name": "Get SKU by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_doc/1688_740898787_9897",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_doc", "1688_740898787_9897"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search SKU by sk field",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": {\n    \"match_phrase\": {\n      \"sk\": \"1688_740898787_9897\"\n    }\n  },\n  \"_source\": [\"sk\", \"name\", \"trending_score\", \"views_count\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get SKU Trending Score",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": {\n    \"match_phrase\": {\n      \"sk\": \"1010_180590882_3331\"\n    }\n  },\n  \"_source\": [\"sk\", \"name\", \"trending_score\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Update Trending Score",
+			"item": [
+				{
+					"name": "Update Single SKU Score",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"doc\": {\n    \"trending_score\": 85.5\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_update/1010_180590882_3331",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_update", "1010_180590882_3331"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Update Trending Scores",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/x-ndjson"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\"update\":{\"_index\":\"skus_product_pool_v3\",\"_id\":\"1010_180590882_3331\"}}\n{\"doc\":{\"trending_score\":10.0}}\n{\"update\":{\"_index\":\"skus_product_pool_v3\",\"_id\":\"1010_188069376_1026\"}}\n{\"doc\":{\"trending_score\":15.0}}\n{\"update\":{\"_index\":\"skus_product_pool_v3\",\"_id\":\"1688_290220802_5843\"}}\n{\"doc\":{\"trending_score\":20.0}}\n"
+						},
+						"url": {
+							"raw": "{{base_url}}/_bulk",
+							"host": ["{{base_url}}"],
+							"path": ["_bulk"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update by Query (Set all to 50)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": {\n    \"range\": {\n      \"trending_score\": {\n        \"lt\": 10\n      }\n    }\n  },\n  \"script\": {\n    \"source\": \"ctx._source.trending_score = 50.0\",\n    \"lang\": \"painless\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_update_by_query",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_update_by_query"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Rerank by Views (Painless Script)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"query\": {\n    \"match_all\": {}\n  },\n  \"script\": {\n    \"source\": \"double views = ctx._source.views_count != null ? ctx._source.views_count : 0; double score = 100.0 - (Math.log10(views + 1) * 25.0); ctx._source.trending_score = Math.max(0, Math.min(100, score));\",\n    \"lang\": \"painless\"\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_update_by_query?conflicts=proceed",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_update_by_query"],
+							"query": [
+								{"key": "conflicts", "value": "proceed"}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Analytics",
+			"item": [
+				{
+					"name": "Trending Score Stats",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"size\": 0,\n  \"aggs\": {\n    \"trending_stats\": {\n      \"stats\": {\n        \"field\": \"trending_score\"\n      }\n    },\n    \"score_distribution\": {\n      \"histogram\": {\n        \"field\": \"trending_score\",\n        \"interval\": 10\n      }\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Top Trending Products",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"size\": 10,\n  \"sort\": [\n    {\"trending_score\": \"desc\"}\n  ],\n  \"_source\": [\"sk\", \"name\", \"trending_score\", \"views_count\", \"price\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Lowest Trending Products",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"size\": 10,\n  \"sort\": [\n    {\"trending_score\": \"asc\"}\n  ],\n  \"_source\": [\"sk\", \"name\", \"trending_score\", \"views_count\", \"price\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Products by Score Range",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"size\": 10,\n  \"query\": {\n    \"range\": {\n      \"trending_score\": {\n        \"gte\": 80,\n        \"lte\": 100\n      }\n    }\n  },\n  \"_source\": [\"sk\", \"name\", \"trending_score\", \"views_count\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Count Products by Score Bracket",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"size\": 0,\n  \"aggs\": {\n    \"score_brackets\": {\n      \"range\": {\n        \"field\": \"trending_score\",\n        \"ranges\": [\n          {\"key\": \"0-25 (Low)\", \"from\": 0, \"to\": 25},\n          {\"key\": \"25-50 (Medium-Low)\", \"from\": 25, \"to\": 50},\n          {\"key\": \"50-75 (Medium-High)\", \"from\": 50, \"to\": 75},\n          {\"key\": \"75-100 (High)\", \"from\": 75, \"to\": 100}\n        ]\n      }\n    }\n  }\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Search with Trending Boost",
+			"item": [
+				{
+					"name": "Search Products (Boosted by Trending)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"size\": 10,\n  \"query\": {\n    \"function_score\": {\n      \"query\": {\n        \"match\": {\n          \"name\": \"dress\"\n        }\n      },\n      \"functions\": [\n        {\n          \"field_value_factor\": {\n            \"field\": \"trending_score\",\n            \"factor\": 0.1,\n            \"modifier\": \"sqrt\",\n            \"missing\": 1\n          }\n        }\n      ],\n      \"boost_mode\": \"multiply\"\n    }\n  },\n  \"_source\": [\"sk\", \"name\", \"trending_score\", \"price\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Category Search with Trending Sort",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"size\": 20,\n  \"query\": {\n    \"bool\": {\n      \"must\": [\n        {\"match\": {\"root\": \"Women\"}},\n        {\"match\": {\"second_category\": \"Dresses\"}}\n      ],\n      \"filter\": [\n        {\"term\": {\"availability\": true}}\n      ]\n    }\n  },\n  \"sort\": [\n    {\"trending_score\": \"desc\"},\n    {\"_score\": \"desc\"}\n  ],\n  \"_source\": [\"sk\", \"name\", \"trending_score\", \"price\", \"category\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/{{index}}/_search",
+							"host": ["{{base_url}}"],
+							"path": ["{{index}}", "_search"]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}

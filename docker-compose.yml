@@ -1,0 +1,22 @@
+version: '3.8'
+
+services:
+  # Reranking Pipeline
+  rerank:
+    build: .
+    image: es-rerank:latest
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+
+  # Analytics API
+  api:
+    build: .
+    image: es-rerank:latest
+    env_file:
+      - .env
+    ports:
+      - "5000:5000"
+    command: ["python", "api.py"]
+    restart: unless-stopped
