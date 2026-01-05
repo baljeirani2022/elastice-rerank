@@ -1,49 +1,138 @@
 # Elasticsearch Reranking Pipeline
 
-A Docker-based pipeline for calculating and updating product trending scores in Elasticsearch based on view metrics from Redshift.
+A pipeline for calculating and updating product trending scores in Elasticsearch based on view metrics from Redshift.
 
 ## Overview
 
 This system promotes low-view products (giving them higher trending scores) and demotes high-view products using a logarithmic decay formula:
 
 ```
-trending_score = 100 - log10(views + 1) * 25
+trending_score = max_score - log10(views + 1) * factor
+```
+
+Default: `max_score=100`, `factor=30`
+
+## Architecture
+
+```
+┌──────────────────┐
+│  EventBridge     │──── Daily 2 AM UTC (Scheduled)
+└────────┬─────────┘
+         │
+         ▼
+┌──────────────────┐     ┌─────────────┐     ┌───────────────┐
+│  Lambda          │────▶│  Redshift   │────▶│ Elasticsearch │
+│  es-rerank       │     │  (views)    │     │ (update scores)│
+└──────────────────┘     └─────────────┘     └───────────────┘
+
+┌──────────────────┐
+│  Docker API      │──── Analytics endpoints
+│  (port 5001)     │
+└──────────────────┘
 ```
 
 ## Components
 
-- **rerank_pipeline.py** - Full pipeline: Redshift → Calculate scores → Update Elasticsearch
-- **rerank.py** - CLI for reranking from existing CSV file
-- **api.py** - Secured REST API for analytics and distributions
-- **fetch_product_metrics.py** - Fetch product metrics from Redshift
+| File | Description |
+|------|-------------|
+| `api.py` | REST API for analytics and manual reranking |
+| `lambda_rerank.py` | AWS Lambda function for scheduled reranking |
+| `deploy_lambda.py` | Script to deploy Lambda to AWS |
+| `rerank_pipeline.py` | Full pipeline CLI tool |
+| `rerank.py` | CLI for reranking from CSV file |
 
 ## Quick Start
 
-### Using Docker Hub
+### Docker Hub
 
 ```bash
-docker pull baljeirani/elastic-rerank:latest
+docker pull baljeirani/es-rerank:latest
 ```
 
 ### Run the API
 
 ```bash
-docker run -d --env-file .env -p 5000:5000 baljeirani/elastic-rerank:latest python api.py
+docker run -d --name es-rerank-api \
+  --env-file .env \
+  -p 5001:5000 \
+  baljeirani/es-rerank:latest python api.py
 ```
 
-### Run the Reranking Pipeline
+### Run Reranking Manually
 
 ```bash
-# Dry run (preview only)
-docker run --env-file .env baljeirani/elastic-rerank:latest python rerank_pipeline.py --dry-run
+# Via API (dry run)
+curl -X POST -H "X-API-Key: your-api-key" "http://localhost:5001/rerank?dry_run=true"
 
-# Apply changes
-docker run --env-file .env baljeirani/elastic-rerank:latest python rerank_pipeline.py --apply
+# Via API (apply)
+curl -X POST -H "X-API-Key: your-api-key" "http://localhost:5001/rerank?max_score=100&factor=30"
+```
+
+## Lambda Deployment
+
+### Prerequisites
+
+- AWS credentials configured in `.env`
+- Python 3.11+
+- boto3 installed
+
+### Deploy to AWS
+
+```bash
+# Install dependencies
+pip install boto3 python-dotenv
+
+# Deploy Lambda with EventBridge schedule
+python deploy_lambda.py
+```
+
+This creates:
+- **IAM Role**: `es-rerank-lambda-role` (with Redshift access)
+- **S3 Bucket**: `es-rerank-lambda-deployments` (for deployment package)
+- **Lambda Function**: `es-rerank`
+- **EventBridge Rule**: `es-rerank-daily` (runs at 2 AM UTC)
+
+### Invoke Lambda Manually
+
+```bash
+# Dry run
+aws lambda invoke --function-name es-rerank \
+  --payload '{"dry_run": true}' \
+  --region me-south-1 output.json
+
+# Full execution
+aws lambda invoke --function-name es-rerank \
+  --payload '{"max_score": 100, "factor": 30}' \
+  --region me-south-1 output.json
+```
+
+### Lambda Configuration
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `max_score` | 100 | Maximum trending score |
+| `factor` | 30 | Decay factor (higher = steeper decay) |
+| `dry_run` | false | Preview without updating |
+| `index` | skus_product_pool_v3 | Elasticsearch index |
+
+### Change Schedule
+
+Edit EventBridge rule in AWS Console or update `deploy_lambda.py`:
+
+```python
+# Daily at 2 AM UTC
+'cron(0 2 * * ? *)'
+
+# Every 6 hours
+'rate(6 hours)'
+
+# Every day at midnight
+'cron(0 0 * * ? *)'
 ```
 
 ## Environment Variables
 
-Create a `.env` file with:
+Create a `.env` file:
 
 ```env
 # AWS Credentials
@@ -56,6 +145,7 @@ REDSHIFT_HOST=your-redshift-host
 REDSHIFT_PORT=5439
 REDSHIFT_DATABASE=your-database
 REDSHIFT_USER=your-user
+REDSHIFT_CLUSTER_ID=your-cluster-id
 
 # Elasticsearch
 ELASTICSEARCH_HOST=https://your-es-host
@@ -71,23 +161,61 @@ ES_INDEX=skus_product_pool_v3
 
 ## API Endpoints
 
+### Analytics (GET)
+
 | Endpoint | Auth | Description |
 |----------|------|-------------|
-| GET /health | No | Health check |
-| GET /stats | Yes | Overall statistics |
-| GET /distribution/views | Yes | Products by view ranges |
-| GET /distribution/scores | Yes | Products by score ranges |
-| GET /top?limit=20 | Yes | Top trending products |
-| GET /bottom?limit=20 | Yes | Bottom trending products |
-| GET /summary | Yes | Complete summary |
+| `/health` | No | Health check |
+| `/stats` | Yes | Overall statistics |
+| `/distribution/views` | Yes | Products by view ranges |
+| `/distribution/scores` | Yes | Products by score ranges |
+| `/top?limit=20` | Yes | Top trending products |
+| `/bottom?limit=20` | Yes | Bottom trending products |
+| `/summary` | Yes | Complete summary |
+| `/sku/<sku_id>` | Yes | Get SKU details |
+| `/download` | Yes | Download metrics CSV |
+| `/download?format=json` | Yes | Download metrics JSON |
+
+### Actions (POST)
+
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `/rerank` | Yes | Trigger reranking |
+| `/rerank?dry_run=true` | Yes | Preview reranking |
+| `/rerank?max_score=100&factor=30` | Yes | Custom formula |
 
 ### Authentication
 
 Use `X-API-Key` header or `api_key` query parameter:
 
 ```bash
-curl -H "X-API-Key: your-api-key" http://localhost:5000/stats
+curl -H "X-API-Key: your-api-key" http://localhost:5001/stats
 ```
+
+## Score Distribution
+
+### Factor Comparison
+
+| Views | Factor=25 | Factor=30 |
+|-------|-----------|-----------|
+| 0 | 100 | 100 |
+| 10 | 74 | 69 |
+| 100 | 50 | 40 |
+| 1,000 | 25 | 10 |
+| 10,000 | 0 | 0 |
+
+Higher factor = more aggressive demotion of popular products.
+
+### Example Distribution (factor=30)
+
+| Score Range | Avg Views | Description |
+|-------------|-----------|-------------|
+| 90-100 | 0-1 | New/unseen products |
+| 75-90 | 3 | Low visibility |
+| 50-75 | 20 | Moderate views |
+| 25-50 | 116 | Popular |
+| 10-25 | 464 | Very popular |
+| 0-10 | 306 | Most viewed |
 
 ## Docker Compose
 
@@ -99,17 +227,17 @@ docker-compose up -d api
 docker-compose run rerank python rerank_pipeline.py --apply
 ```
 
-## Score Distribution
+## Postman Collection
 
-The logarithmic formula creates this distribution:
+Import `elasticsearch-rerank.postman_collection.json` for all API endpoints.
 
-| Views | Trending Score |
-|-------|----------------|
-| 0 | 100 |
-| 10 | 74 |
-| 100 | 50 |
-| 1,000 | 25 |
-| 10,000 | 0 |
+## GitHub
+
+https://github.com/baljeirani2022/elastice-rerank
+
+## Docker Hub
+
+https://hub.docker.com/r/baljeirani/es-rerank
 
 ## License
 
