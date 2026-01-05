@@ -1,0 +1,97 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Elasticsearch Reranking Lambda Function
+
+Parameters:
+  ElasticsearchHost:
+    Type: String
+    Description: Elasticsearch host URL
+  ElasticsearchPort:
+    Type: String
+    Default: '9243'
+  ElasticsearchUsername:
+    Type: String
+    Default: 'elastic'
+  ElasticsearchPassword:
+    Type: String
+    NoEcho: true
+  RedshiftHost:
+    Type: String
+    Description: Redshift cluster host
+  RedshiftDatabase:
+    Type: String
+    Default: 'datawarehouse_db'
+  RedshiftUser:
+    Type: String
+    Default: 'awsuser'
+  RedshiftClusterId:
+    Type: String
+    Default: 'jazi-datawarehouse-cluster'
+  EsIndex:
+    Type: String
+    Default: 'skus_product_pool_v3'
+  MaxScore:
+    Type: String
+    Default: '100'
+  Factor:
+    Type: String
+    Default: '30'
+  ScheduleExpression:
+    Type: String
+    Default: 'cron(0 2 * * ? *)'  # Daily at 2 AM UTC
+    Description: CloudWatch Events schedule expression
+
+Resources:
+  RerankFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: es-rerank
+      Handler: lambda_rerank.lambda_handler
+      Runtime: python3.11
+      CodeUri: .
+      Description: Rerank products based on view counts
+      Timeout: 900  # 15 minutes max
+      MemorySize: 1024
+      Environment:
+        Variables:
+          ELASTICSEARCH_HOST: !Ref ElasticsearchHost
+          ELASTICSEARCH_PORT: !Ref ElasticsearchPort
+          ELASTICSEARCH_USERNAME: !Ref ElasticsearchUsername
+          ELASTICSEARCH_PASSWORD: !Ref ElasticsearchPassword
+          REDSHIFT_HOST: !Ref RedshiftHost
+          REDSHIFT_DATABASE: !Ref RedshiftDatabase
+          REDSHIFT_USER: !Ref RedshiftUser
+          REDSHIFT_CLUSTER_ID: !Ref RedshiftClusterId
+          ES_INDEX: !Ref EsIndex
+          MAX_SCORE: !Ref MaxScore
+          FACTOR: !Ref Factor
+      Policies:
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - redshift:GetClusterCredentials
+                - redshift:DescribeClusters
+              Resource: '*'
+      Events:
+        ScheduledRerank:
+          Type: Schedule
+          Properties:
+            Schedule: !Ref ScheduleExpression
+            Description: Scheduled reranking trigger
+            Enabled: true
+            Input: '{"max_score": 100, "factor": 30}'
+
+  RerankFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${RerankFunction}
+      RetentionInDays: 14
+
+Outputs:
+  RerankFunctionArn:
+    Description: Lambda function ARN
+    Value: !GetAtt RerankFunction.Arn
+  RerankFunctionName:
+    Description: Lambda function name
+    Value: !Ref RerankFunction
