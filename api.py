@@ -22,10 +22,14 @@ Endpoints:
 """
 
 import os
+import numpy as np
+import pandas as pd
+import redshift_connector
 from functools import wraps
 from flask import Flask, jsonify, request
 from dotenv import load_dotenv
 from elasticsearch import Elasticsearch
+from elasticsearch.helpers import bulk
 
 load_dotenv()
 
@@ -399,6 +403,273 @@ def summary():
     })
 
 
+def get_redshift_connection():
+    """Create Redshift connection using IAM authentication."""
+    return redshift_connector.connect(
+        iam=True,
+        host=os.getenv('REDSHIFT_HOST'),
+        port=int(os.getenv('REDSHIFT_PORT', 5439)),
+        database=os.getenv('REDSHIFT_DATABASE'),
+        db_user=os.getenv('REDSHIFT_USER'),
+        access_key_id=os.getenv('AWS_ACCESS_KEY_ID'),
+        secret_access_key=os.getenv('AWS_SECRET_ACCESS_KEY'),
+        region=os.getenv('AWS_REGION'),
+        cluster_identifier=os.getenv('REDSHIFT_CLUSTER_ID', 'jazi-datawarehouse-cluster')
+    )
+
+
+def calculate_trending_score(views: float, max_score: float = 100, factor: float = 25) -> float:
+    """
+    Calculate trending score using logarithmic decay.
+    Low views = high score (promoted), high views = low score (demoted).
+    """
+    score = max_score - (np.log10(views + 1) * factor)
+    return max(0, min(max_score, score))
+
+
+@app.route('/rerank', methods=['POST'])
+@require_api_key
+def rerank():
+    """
+    Trigger reranking of products based on view counts from Redshift.
+
+    Query params:
+        - dry_run: If 'true', only preview changes without updating (default: false)
+        - max_score: Maximum score value (default: 100)
+        - factor: Decay factor for logarithmic formula (default: 25)
+        - index: Elasticsearch index to update (default: skus_product_pool_v3)
+    """
+    dry_run = request.args.get('dry_run', 'false').lower() == 'true'
+    max_score = float(request.args.get('max_score', 100))
+    factor = float(request.args.get('factor', 25))
+    index = request.args.get('index', DEFAULT_INDEX)
+
+    try:
+        # Step 1: Fetch data from Redshift
+        conn = get_redshift_connection()
+
+        query = """
+        SELECT sku, item_viewed
+        FROM product_reports.product_metrics
+        WHERE pushed_status = 'Completed'
+          AND app_status = 'Live'
+        """
+
+        df = pd.read_sql(query, conn)
+        conn.close()
+
+        if df.empty:
+            return jsonify({
+                "status": "error",
+                "message": "No products found in Redshift"
+            }), 404
+
+        # Step 2: Calculate trending scores
+        df['trending_score'] = df['item_viewed'].apply(
+            lambda v: calculate_trending_score(v, max_score, factor)
+        )
+
+        # Stats
+        stats = {
+            "total_products": len(df),
+            "score_min": round(df['trending_score'].min(), 2),
+            "score_max": round(df['trending_score'].max(), 2),
+            "score_avg": round(df['trending_score'].mean(), 2),
+            "views_min": int(df['item_viewed'].min()),
+            "views_max": int(df['item_viewed'].max()),
+            "views_avg": round(df['item_viewed'].mean(), 2)
+        }
+
+        # Preview samples
+        preview = {
+            "lowest_views": df.nsmallest(5, 'item_viewed')[['sku', 'item_viewed', 'trending_score']].to_dict('records'),
+            "highest_views": df.nlargest(5, 'item_viewed')[['sku', 'item_viewed', 'trending_score']].to_dict('records')
+        }
+
+        if dry_run:
+            return jsonify({
+                "status": "dry_run",
+                "message": "Preview only - no changes made",
+                "index": index,
+                "formula": f"score = {max_score} - log10(views + 1) * {factor}",
+                "stats": stats,
+                "preview": preview
+            })
+
+        # Step 3: Update Elasticsearch
+        es = get_es_client()
+
+        def generate_actions():
+            for _, row in df.iterrows():
+                yield {
+                    "_op_type": "update",
+                    "_index": index,
+                    "_id": row['sku'],
+                    "doc": {
+                        "trending_score": row['trending_score'],
+                        "views_count": int(row['item_viewed'])
+                    }
+                }
+
+        success, failed = bulk(es, generate_actions(), chunk_size=500, raise_on_error=False)
+        failed_count = len(failed) if isinstance(failed, list) else failed
+
+        return jsonify({
+            "status": "completed",
+            "message": f"Reranking completed successfully",
+            "index": index,
+            "formula": f"score = {max_score} - log10(views + 1) * {factor}",
+            "stats": stats,
+            "results": {
+                "updated": success,
+                "failed": failed_count
+            },
+            "preview": preview
+        })
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route('/sku/<sku_id>', methods=['GET'])
+@require_api_key
+def get_sku(sku_id):
+    """
+    Get product details by SKU ID.
+
+    Returns product info from both Elasticsearch and Redshift.
+    """
+    index = request.args.get('index', DEFAULT_INDEX)
+    include_redshift = request.args.get('include_redshift', 'true').lower() == 'true'
+
+    try:
+        es = get_es_client()
+
+        # Search in Elasticsearch
+        result = es.search(
+            index=index,
+            query={"term": {"sk.keyword": sku_id}},
+            size=1
+        )
+
+        if result['hits']['total']['value'] == 0:
+            # Try direct doc lookup
+            try:
+                doc = es.get(index=index, id=sku_id)
+                es_data = doc['_source']
+            except:
+                es_data = None
+        else:
+            es_data = result['hits']['hits'][0]['_source']
+
+        response = {
+            "sku": sku_id,
+            "elasticsearch": es_data
+        }
+
+        # Optionally fetch from Redshift
+        if include_redshift:
+            try:
+                conn = get_redshift_connection()
+                query = f"""
+                SELECT *
+                FROM product_reports.product_metrics
+                WHERE sku = '{sku_id}'
+                """
+                df = pd.read_sql(query, conn)
+                conn.close()
+
+                if not df.empty:
+                    response["redshift"] = df.iloc[0].to_dict()
+                else:
+                    response["redshift"] = None
+            except Exception as e:
+                response["redshift_error"] = str(e)
+
+        return jsonify(response)
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
+@app.route('/download', methods=['GET'])
+@require_api_key
+def download_metrics():
+    """
+    Download current product metrics from Redshift as CSV.
+
+    Query params:
+        - format: 'json' or 'csv' (default: csv)
+    """
+    from flask import Response
+    from datetime import datetime
+
+    output_format = request.args.get('format', 'csv').lower()
+
+    try:
+        conn = get_redshift_connection()
+
+        query = """
+        SELECT
+            sku,
+            name,
+            catalog_tag,
+            catalog_layer1,
+            catalog_layer2,
+            pushed_status,
+            app_status,
+            item_viewed,
+            users_viewed_item,
+            item_added_to_bag,
+            users_ordered,
+            quantity_ordered,
+            product_revenue,
+            product_profit,
+            views_score,
+            conversion_score,
+            total_score_raw,
+            rank_overall
+        FROM product_reports.product_metrics
+        WHERE pushed_status = 'Completed'
+          AND app_status = 'Live'
+        ORDER BY item_viewed DESC
+        """
+
+        df = pd.read_sql(query, conn)
+        conn.close()
+
+        if output_format == 'json':
+            return jsonify({
+                "status": "success",
+                "count": len(df),
+                "data": df.to_dict('records')
+            })
+
+        # CSV format
+        csv_data = df.to_csv(index=False)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H%M%S")
+
+        return Response(
+            csv_data,
+            mimetype='text/csv',
+            headers={
+                'Content-Disposition': f'attachment; filename=product_metrics_{timestamp}.csv'
+            }
+        )
+
+    except Exception as e:
+        return jsonify({
+            "status": "error",
+            "message": str(e)
+        }), 500
+
+
 @app.errorhandler(404)
 def not_found(e):
     return jsonify({"error": "Not found", "message": "The requested endpoint does not exist"}), 404
@@ -422,14 +693,20 @@ if __name__ == '__main__':
 ╠══════════════════════════════════════════════════════════╣
 ║  Authentication: X-API-Key header or ?api_key= param    ║
 ╠══════════════════════════════════════════════════════════╣
-║  Endpoints:                                              ║
-║    GET /health              - Health check (no auth)     ║
-║    GET /stats               - Overall stats              ║
-║    GET /distribution/views  - By view ranges             ║
-║    GET /distribution/scores - By score ranges            ║
-║    GET /top?limit=20        - Top trending               ║
-║    GET /bottom?limit=20     - Bottom trending            ║
-║    GET /summary             - Full summary               ║
+║  Analytics Endpoints:                                    ║
+║    GET  /health              - Health check (no auth)    ║
+║    GET  /stats               - Overall stats             ║
+║    GET  /distribution/views  - By view ranges            ║
+║    GET  /distribution/scores - By score ranges           ║
+║    GET  /top?limit=20        - Top trending              ║
+║    GET  /bottom?limit=20     - Bottom trending           ║
+║    GET  /summary             - Full summary              ║
+║    GET  /sku/<sku_id>        - Get SKU details           ║
+╠══════════════════════════════════════════════════════════╣
+║  Action Endpoints:                                       ║
+║    POST /rerank              - Trigger reranking         ║
+║    POST /rerank?dry_run=true - Preview reranking         ║
+║    GET  /download            - Download metrics CSV      ║
 ╚══════════════════════════════════════════════════════════╝
     """)
     app.run(host='0.0.0.0', port=port, debug=False)
